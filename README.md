@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # readyremake
 
 A new Flutter project.
@@ -14,3 +15,6 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+# cvk
+>>>>>>> e75b3bd2c3b641fe5c2f0dfd1f396ea0fcaa42c9
