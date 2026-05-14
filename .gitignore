@@ -11,6 +11,12 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+/build
+android/app/build
+.dart_tool
+.idea
+*.apk
+*.aab
 
 # IntelliJ related
 *.iml

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
@@ -44,19 +46,35 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
     }
   }
 
-  void _submitReport() {
+Future<void> _submitReport() async {
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+
+    await FirebaseFirestore.instance.collection('complaints').add({
+      'userId': user?.uid ?? 'guest',
+      'category': _selectedCategory ?? 'No Category',
+      'description': _descriptionController.text.trim(),
+      'priority': _selectedPriority ?? 'Not Set',
+      'location': 'MG Road, Mumbai, Maharashtra',
+      'status': 'Pending',
+      'imagePath': _selectedImage?.path ?? '',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Icon(Icons.check_circle, color: Colors.green, size: 60),
-        content: Column(
+        content: const Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             Text("Submission Successful", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             SizedBox(height: 10),
-            Text("Your report has been received. We will notify you once action is taken.", textAlign: TextAlign.center),
+            Text("Your report has been saved successfully.", textAlign: TextAlign.center),
           ],
         ),
         actions: [
@@ -76,7 +94,13 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
         ],
       ),
     );
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Failed to submit report: $e")),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +134,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       child: Row(
         children: [
           Container(
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withAlpha(13), blurRadius: 10)]),
             child: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A237E), size: 18),
               onPressed: () {
@@ -137,7 +161,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)]),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 10)]),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -172,9 +196,9 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(30),
-                boxShadow: [BoxShadow(color: const Color(0xFF2962FF).withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10))],
+                boxShadow: [BoxShadow(color: const Color(0xFF2962FF).withAlpha(26), blurRadius: 20, offset: const Offset(0, 10))],
                 image: _selectedImage != null ? DecorationImage(image: FileImage(_selectedImage!), fit: BoxFit.cover) : null,
-                border: Border.all(color: _selectedImage == null ? const Color(0xFF2962FF).withOpacity(0.2) : Colors.transparent, width: 2),
+                border: Border.all(color: _selectedImage == null ? const Color(0xFF2962FF).withAlpha(51) : Colors.transparent, width: 2),
               ),
               child: _selectedImage == null 
                 ? Column(
@@ -182,7 +206,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(color: const Color(0xFF2962FF).withOpacity(0.05), shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: const Color(0xFF2962FF).withAlpha(13), shape: BoxShape.circle),
                         child: const Icon(Icons.add_a_photo_rounded, size: 50, color: Color(0xFF2962FF)),
                       ),
                       const SizedBox(height: 15),
@@ -221,7 +245,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                 const SizedBox(height: 25),
                 _buildSectionHeader("Select Category"),
                 const SizedBox(height: 10),
-                ..._categories.map((cat) => _buildCategoryTile(cat)).toList(),
+                ..._categories.map((cat) => _buildCategoryTile(cat)),
               ],
             ),
           ),
@@ -291,14 +315,21 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20)],
+                    boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 20)],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(15),
-                        child: Image.file(_selectedImage!, height: 180, width: double.infinity, fit: BoxFit.cover),
+                        child: _selectedImage != null
+                            ? Image.file(_selectedImage!, height: 180, width: double.infinity, fit: BoxFit.cover)
+                            : Container(
+                                height: 180,
+                                width: double.infinity,
+                                color: const Color(0xFFF1F5F9),
+                                child: const Icon(Icons.image_not_supported_rounded, size: 48, color: Colors.grey),
+                              ),
                       ),
                       const SizedBox(height: 24),
                       _buildReviewRow("LOCATION", "MG Road, Mumbai, Maharashtra", Icons.location_on_rounded),
@@ -409,7 +440,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
           color: isSelected ? const Color(0xFFF0F7FF) : Colors.white,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(color: isSelected ? const Color(0xFF2962FF) : Colors.transparent, width: 2),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Row(
           children: [
@@ -441,10 +472,10 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.05) : Colors.white,
+          color: isSelected ? color.withAlpha(13) : Colors.white,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(color: isSelected ? color : Colors.transparent, width: 2),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 10)],
         ),
         child: Row(
           children: [
@@ -467,7 +498,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 10)],
       ),
       child: TextField(
         controller: _descriptionController,
@@ -489,7 +520,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFFE3F2FD), 
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF2962FF).withOpacity(0.2))
+          border: Border.all(color: const Color(0xFF2962FF).withAlpha(51))
       ),
       child: Row(children: const [
         Icon(Icons.mic_rounded, color: Color(0xFF2962FF)),
@@ -505,7 +536,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       decoration: BoxDecoration(
         color: Colors.white, 
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 10)],
       ),
       child: Row(children: const [
         Icon(Icons.my_location_rounded, color: Color(0xFF2962FF), size: 20),
@@ -516,10 +547,17 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
     );
   }
 
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    _otherTitleController.dispose();
+    super.dispose();
+  }
+
   Widget _buildNavigationButtons({required VoidCallback onNext, required bool enabled, bool showBack = true}) {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))]),
+      decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withAlpha(13), blurRadius: 20, offset: const Offset(0, -5))]),
       child: Row(
         children: [
           if (showBack) ...[
@@ -556,7 +594,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       decoration: BoxDecoration(
         color: isDone ? Colors.green : (isActive ? const Color(0xFF2962FF) : const Color(0xFFF1F5F9)),
         shape: BoxShape.circle,
-        boxShadow: isActive ? [BoxShadow(color: const Color(0xFF2962FF).withOpacity(0.3), blurRadius: 8, spreadRadius: 2)] : null,
+        boxShadow: isActive ? [BoxShadow(color: const Color(0xFF2962FF).withAlpha(77), blurRadius: 8, spreadRadius: 2)] : null,
       ),
       child: Center(
         child: isDone 

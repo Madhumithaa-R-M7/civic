@@ -1,4 +1,4 @@
-package com.example.readyremake
+package com.example.cvk
 
 import io.flutter.embedding.android.FlutterActivity
 

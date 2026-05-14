@@ -1,41 +1,104 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'language_screen.dart';
 
-class OtpScreen extends StatelessWidget {
+class OtpScreen extends StatefulWidget {
   final bool isFromMobile;
-  const OtpScreen({super.key, required this.isFromMobile});
+  final String verificationId;
+
+  const OtpScreen({
+    super.key,
+    required this.isFromMobile,
+    required this.verificationId,
+  });
+
+  @override
+  State<OtpScreen> createState() => _OtpScreenState();
+}
+
+class _OtpScreenState extends State<OtpScreen> {
+  final TextEditingController _otpController = TextEditingController();
+  bool _isLoading = false;
+  String? _otpError;
+
+  Future<void> _verifyOtp() async {
+    final otp = _otpController.text.trim();
+
+    if (otp.length != 6) {
+      setState(() {
+        _otpError = "Enter valid 6-digit OTP";
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _otpError = null;
+    });
+
+    try {
+      PhoneAuthCredential credential = PhoneAuthProvider.credential(
+        verificationId: widget.verificationId,
+        smsCode: otp,
+      );
+
+      await FirebaseAuth.instance.signInWithCredential(credential);
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LanguageScreen()),
+      );
+    } catch (e) {
+      setState(() {
+        _otpError = "Invalid OTP. Please try again.";
+      });
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _otpController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bool hasError = _otpError != null;
+
     return Scaffold(
       backgroundColor: Colors.white,
-      // Add an AppBar for a cleaner "back" experience
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A237E), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Color(0xFF1A237E),
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // 1. Background Decorative Elements (Consistent with Login)
           Positioned(
             top: -50,
             right: -50,
             child: _buildCircle(200, const Color(0xFFE3F2FD)),
           ),
-          
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 28),
               child: Column(
                 children: [
                   const SizedBox(height: 40),
-                  
-                  // 2. Refined Logo Section
                   Container(
                     height: 90,
                     width: 90,
@@ -44,154 +107,129 @@ class OtpScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF2962FF).withOpacity(0.1),
+                          color: const Color(0xFF2962FF).withAlpha(26),
                           blurRadius: 30,
                           offset: const Offset(0, 10),
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.shield_outlined, // Changed to shield for "Verification" feel
+                    child: Icon(
+                      hasError ? Icons.error_outline_rounded : Icons.shield_outlined,
                       size: 45,
-                      color: Color(0xFF2962FF),
+                      color: hasError ? Colors.red : const Color(0xFF2962FF),
                     ),
                   ),
-                  
                   const SizedBox(height: 40),
-                  
-                  // 3. Header Texts
                   const Text(
                     "Verify Code",
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF1A237E),
-                      letterSpacing: -0.5,
                     ),
                   ),
                   const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: RichText(
+                    child: Text(
+                      "Enter the 6-digit code sent to your mobile number",
                       textAlign: TextAlign.center,
-                      text: TextSpan(
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 15, height: 1.5),
-                        children: [
-                          const TextSpan(text: "Enter the 6-digit code we sent to your "),
-                          TextSpan(
-                            text: isFromMobile ? "Mobile Number" : "Email Address",
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A237E)),
-                          ),
-                        ],
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 15,
+                        height: 1.5,
                       ),
                     ),
                   ),
-                  
                   const SizedBox(height: 50),
-
-                  // 4. Enhanced OTP Input
-                  // Using a clean, rounded style that feels like individual boxes
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: TextField(
+                      controller: _otpController,
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
                       maxLength: 6,
-                      style: const TextStyle(
+                      onChanged: (_) {
+                        if (_otpError != null) {
+                          setState(() => _otpError = null);
+                        }
+                      },
+                      style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 20.0, // Creates the "box" feel
-                        color: Color(0xFF2962FF),
+                        letterSpacing: 20.0,
+                        color: hasError ? Colors.red : const Color(0xFF2962FF),
                       ),
                       decoration: InputDecoration(
                         counterText: "",
+                        errorText: _otpError,
                         hintText: "••••••",
-                        hintStyle: TextStyle(color: Colors.grey.shade300, letterSpacing: 20),
+                        hintStyle: TextStyle(
+                          color: Colors.grey.shade300,
+                          letterSpacing: 20,
+                        ),
                         filled: true,
-                        fillColor: const Color(0xFFF1F5F9),
+                        fillColor: hasError
+                            ? Colors.red.withOpacity(0.06)
+                            : const Color(0xFFF1F5F9),
                         contentPadding: const EdgeInsets.symmetric(vertical: 20),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
-                          borderSide: const BorderSide(color: Colors.transparent),
+                          borderSide: BorderSide(
+                            color: hasError ? Colors.red : Colors.transparent,
+                            width: 2,
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
-                          borderSide: const BorderSide(color: Color(0xFF2962FF), width: 2),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 40),
-
-                  // 5. Primary Action Button
-                  Container(
-                    decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF2962FF).withOpacity(0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const LanguageScreen()),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2962FF),
-                        minimumSize: const Size(double.infinity, 60),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        "Verify & Continue",
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  // 6. Resend Options
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        "Didn't receive the code? ",
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                      TextButton(
-                        onPressed: () {},
-                        child: const Text(
-                          "Resend OTP",
-                          style: TextStyle(
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
+                          borderSide: BorderSide(
+                            color: hasError ? Colors.red : const Color(0xFF2962FF),
+                            width: 2,
                           ),
                         ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: const BorderSide(color: Colors.red, width: 2),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: const BorderSide(color: Colors.red, width: 2),
+                        ),
                       ),
-                    ],
+                    ),
                   ),
-                  
+                  const SizedBox(height: 40),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _verifyOtp,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2962FF),
+                      minimumSize: const Size(double.infinity, 60),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      _isLoading ? "Verifying..." : "Verify & Continue",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: Text(
-                      "Edit ${isFromMobile ? 'Mobile Number' : 'Email'}",
-                      style: const TextStyle(
+                    child: const Text(
+                      "Edit Mobile Number",
+                      style: TextStyle(
                         color: Color(0xFF1A237E),
                         fontWeight: FontWeight.w600,
                         decoration: TextDecoration.underline,
                       ),
                     ),
                   ),
-                  
-                  const SizedBox(height: 40),
                 ],
               ),
             ),

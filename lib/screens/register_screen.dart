@@ -61,7 +61,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     borderRadius: BorderRadius.circular(15),
                     boxShadow: [
                       BoxShadow(
-                          color: Colors.black.withOpacity(0.05), blurRadius: 15)
+                          color: Colors.black.withAlpha(13), blurRadius: 15)
                     ],
                   ),
                   child: Column(

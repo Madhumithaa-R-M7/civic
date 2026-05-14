@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "370361955515",
+    "project_id": "readyremake",
+    "storage_bucket": "readyremake.firebasestorage.app"
+   
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:370361955515:android:333d357bafed940c65259e",
+        "android_client_info": {
+          "package_name": "com.example.cvk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyArmZ7wIIaaVuLGHgvECOPyLhUGTqB7wCI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

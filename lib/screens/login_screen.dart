@@ -1,5 +1,5 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'register_screen.dart';
 import 'otp_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -14,18 +14,22 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _inputController = TextEditingController();
 
   @override
+  void dispose() {
+    _inputController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // 1. Background Decorative Elements
           Positioned(
             top: -100,
             right: -50,
             child: _buildCircle(250, const Color(0xFFE3F2FD)),
           ),
-          
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -33,8 +37,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 60),
-                  
-                  // 2. Logo Section
                   Center(
                     child: Container(
                       height: 90,
@@ -57,10 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  
                   const SizedBox(height: 40),
-                  
-                  // 3. Header Text
                   const Text(
                     "Welcome Back",
                     style: TextStyle(
@@ -72,17 +71,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Log in to your Civic Connect account to keep your neighborhood better.",
+                    "Log in to your RescueNet account to keep your neighborhood better.",
                     style: TextStyle(
                       color: Colors.grey.shade600,
                       fontSize: 15,
                       height: 1.5,
                     ),
                   ),
-                  
                   const SizedBox(height: 40),
-
-                  // 4. Custom Segmented Tab
                   Container(
                     height: 55,
                     padding: const EdgeInsets.all(6),
@@ -92,19 +88,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     child: Row(
                       children: [
-                        _buildEnhancedTab("Mobile", Icons.phone_android_rounded, isMobileSelected, () {
-                          setState(() => isMobileSelected = true);
-                        }),
-                        _buildEnhancedTab("Email", Icons.email_rounded, !isMobileSelected, () {
-                          setState(() => isMobileSelected = false);
-                        }),
+                        _buildEnhancedTab(
+                          "Mobile",
+                          Icons.phone_android_rounded,
+                          isMobileSelected,
+                          () => setState(() => isMobileSelected = true),
+                        ),
+                        _buildEnhancedTab(
+                          "Email",
+                          Icons.email_rounded,
+                          !isMobileSelected,
+                          () => setState(() => isMobileSelected = false),
+                        ),
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 30),
-
-                  // 5. Input Field
                   Text(
                     isMobileSelected ? "Mobile Number" : "Email Address",
                     style: const TextStyle(
@@ -116,35 +115,55 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 10),
                   TextField(
                     controller: _inputController,
-                    keyboardType: isMobileSelected ? TextInputType.phone : TextInputType.emailAddress,
+                    keyboardType: isMobileSelected
+                        ? TextInputType.phone
+                        : TextInputType.emailAddress,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: Colors.white,
-                      hintText: isMobileSelected ? "Enter your mobile number" : "Enter your email",
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal),
-                      prefixIcon: isMobileSelected 
-                        ? Container(
-                            width: 60,
-                            alignment: Alignment.center,
-                            child: const Text("+91", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1A237E))),
-                          )
-                        : const Icon(Icons.alternate_email_rounded, color: Color(0xFF2962FF)),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                      hintText: isMobileSelected
+                          ? "Enter your mobile number"
+                          : "Enter your email",
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontWeight: FontWeight.normal,
+                      ),
+                      prefixIcon: isMobileSelected
+                          ? Container(
+                              width: 60,
+                              alignment: Alignment.center,
+                              child: const Text(
+                                "+91",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Color(0xFF1A237E),
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.alternate_email_rounded,
+                              color: Color(0xFF2962FF),
+                            ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 18,
+                        horizontal: 16,
+                      ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide(color: Colors.grey.shade200),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(color: Color(0xFF2962FF), width: 2),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF2962FF),
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 35),
-
-                  // 6. Action Button
                   Container(
                     decoration: BoxDecoration(
                       boxShadow: [
@@ -156,40 +175,86 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                     child: ElevatedButton(
-                      onPressed: () => Navigator.push(
-                        context, 
-                        MaterialPageRoute(builder: (context) => OtpScreen(isFromMobile: isMobileSelected))
-                      ),
+                      onPressed: () async {
+  if (!isMobileSelected) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Email OTP is not enabled now. Use mobile OTP.")),
+    );
+    return;
+  }
+
+  String phone = _inputController.text.trim();
+
+  if (phone.length == 10) {
+    phone = "+91$phone";
+  }
+
+  await FirebaseAuth.instance.verifyPhoneNumber(
+    phoneNumber: phone,
+    verificationCompleted: (PhoneAuthCredential credential) async {
+      await FirebaseAuth.instance.signInWithCredential(credential);
+    },
+    verificationFailed: (FirebaseAuthException e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? "OTP sending failed")),
+      );
+    },
+    codeSent: (String verificationId, int? resendToken) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OtpScreen(
+            isFromMobile: true,
+            verificationId: verificationId,
+          ),
+        ),
+      );
+    },
+    codeAutoRetrievalTimeout: (String verificationId) {},
+  );
+},
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2962FF),
                         minimumSize: const Size(double.infinity, 60),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                         elevation: 0,
                       ),
                       child: const Text(
                         "Send Verification Code",
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 30),
-
-                  // 7. Footer
                   Center(
                     child: GestureDetector(
-                      onTap: () => Navigator.push(
-                        context, 
-                        MaterialPageRoute(builder: (context) => const RegisterScreen())
-                      ),
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Register screen disabled for testing"),
+                          ),
+                        );
+                      },
                       child: RichText(
                         text: TextSpan(
                           text: "Don't have an account? ",
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 15,
+                          ),
                           children: const [
                             TextSpan(
                               text: "Create One",
-                              style: TextStyle(color: Color(0xFF2962FF), fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                color: Color(0xFF2962FF),
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ],
                         ),
@@ -206,7 +271,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Helper Widget for decorative circles
   Widget _buildCircle(double size, Color color) {
     return Container(
       width: size,
@@ -215,8 +279,12 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Helper Widget for the Tab toggle
-  Widget _buildEnhancedTab(String title, IconData icon, bool isActive, VoidCallback onTap) {
+  Widget _buildEnhancedTab(
+    String title,
+    IconData icon,
+    bool isActive,
+    VoidCallback onTap,
+  ) {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -225,14 +293,24 @@ class _LoginScreenState extends State<LoginScreen> {
           decoration: BoxDecoration(
             color: isActive ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: isActive 
-              ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))] 
-              : [],
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ]
+                : [],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 18, color: isActive ? const Color(0xFF2962FF) : Colors.grey),
+              Icon(
+                icon,
+                size: 18,
+                color: isActive ? const Color(0xFF2962FF) : Colors.grey,
+              ),
               const SizedBox(width: 8),
               Text(
                 title,

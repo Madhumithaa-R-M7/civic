@@ -11,20 +11,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:readyremake/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+  testWidgets('Login screen renders', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const CivicConnectApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Verify that the login screen shows the expected text.
+    expect(find.text('Welcome Back'), findsOneWidget);
+    expect(find.text('Log in to your Civic Connect account to keep your neighborhood better.'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verify that the button to send verification code exists.
+    expect(find.text('Send Verification Code'), findsOneWidget);
   });
 }
