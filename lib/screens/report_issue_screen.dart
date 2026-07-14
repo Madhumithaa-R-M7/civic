@@ -1,9 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 class ReportIssueScreen extends StatefulWidget {
   final VoidCallback? onBackToHome;
   const ReportIssueScreen({super.key, this.onBackToHome});
@@ -14,12 +17,17 @@ class ReportIssueScreen extends StatefulWidget {
 
 class _ReportIssueScreenState extends State<ReportIssueScreen> {
   File? _selectedImage;
+  String _currentAddress = "Fetching location...";
+  double? _latitude;
+  double? _longitude;
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
   final ImagePicker _picker = ImagePicker();
-  
   int _currentStep = 1;
   String? _selectedCategory;
   String? _selectedPriority;
   bool _isConfirmed = false; 
+  bool _isSubmitting = false; 
   
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _otherTitleController = TextEditingController();
@@ -45,19 +53,122 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       debugPrint("Error: $e");
     }
   }
+ Future<void> _getCurrentLocation() async {
+  print("LOCATION FUNCTION CALLED");
+  bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+  if (!serviceEnabled) {
+    setState(() {
+      _currentAddress = "Location disabled";
+    });
+    return;
+  }
+
+  LocationPermission permission = await Geolocator.checkPermission();
+
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+  }
+
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    setState(() {
+      _currentAddress = "Permission denied";
+    });
+    return;
+  }
+
+  Position position = await Geolocator.getCurrentPosition(
+    desiredAccuracy: LocationAccuracy.high,
+  );
+
+  _latitude = position.latitude;
+  _longitude = position.longitude;
+
+  List<Placemark> placemarks = await placemarkFromCoordinates(
+    position.latitude,
+    position.longitude,
+  );
+
+  Placemark place = placemarks.first;
+
+setState(() {
+  _currentAddress =
+      "${place.street}, ${place.locality}, ${place.administrativeArea}";
+});
+
+print(_currentAddress);
+}   // _getCurrentLocation ends here
+
+Future<void> _listenVoice() async {
+  bool available = await _speech.initialize(
+    onError: (error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Speech error: ${error.errorMsg}")),
+      );
+    },
+    onStatus: (status) {
+      if (status == "done" || status == "notListening") {
+        setState(() => _isListening = false);
+      }
+    },
+  );
+
+  if (!available) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Speech recognition not available")),
+    );
+    return;
+  }
+
+  if (!_isListening) {
+    setState(() => _isListening = true);
+
+    _speech.listen(
+      localeId: "en_IN",
+      onResult: (result) {
+        setState(() {
+          _descriptionController.text = result.recognizedWords;
+        });
+      },
+    );
+  } else {
+    setState(() => _isListening = false);
+    await _speech.stop();
+  }
+}
+
 
 Future<void> _submitReport() async {
+  setState(() {
+    _isSubmitting = true;
+  });
+
   try {
     final user = FirebaseAuth.instance.currentUser;
+    String imageUrl = '';
+
+    if (_selectedImage != null) {
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('complaints')
+          .child(fileName);
+      await storageRef.putFile(_selectedImage!);
+      imageUrl = await storageRef.getDownloadURL();
+    }
 
     await FirebaseFirestore.instance.collection('complaints').add({
       'userId': user?.uid ?? 'guest',
       'category': _selectedCategory ?? 'No Category',
       'description': _descriptionController.text.trim(),
       'priority': _selectedPriority ?? 'Not Set',
-      'location': 'MG Road, Mumbai, Maharashtra',
+      'location': _currentAddress,
+      'latitude': _latitude,
+      'longitude': _longitude,
       'status': 'Pending',
       'imagePath': _selectedImage?.path ?? '',
+      'imageUrl': imageUrl,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -99,7 +210,19 @@ Future<void> _submitReport() async {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text("Failed to submit report: $e")),
     );
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isSubmitting = false;
+      });
+    }
   }
+}
+@override
+void initState() {
+  super.initState();
+  _speech = stt.SpeechToText();
+  _getCurrentLocation();
 }
 
   @override
@@ -137,17 +260,19 @@ Future<void> _submitReport() async {
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withAlpha(13), blurRadius: 10)]),
             child: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A237E), size: 18),
-              onPressed: () {
-                if (_currentStep > 1) {
-                  setState(() => _currentStep--);
-                } else {
-                  if (widget.onBackToHome != null) {
-                    widget.onBackToHome!();
-                  } else {
-                    Navigator.pop(context, 'return_home');
-                  }
-                }
-              },
+              onPressed: _isSubmitting
+                  ? null
+                  : () {
+                      if (_currentStep > 1) {
+                        setState(() => _currentStep--);
+                      } else {
+                        if (widget.onBackToHome != null) {
+                          widget.onBackToHome!();
+                        } else {
+                          Navigator.pop(context, 'return_home');
+                        }
+                      }
+                    },
             ),
           ),
           const SizedBox(width: 16),
@@ -332,7 +457,7 @@ Future<void> _submitReport() async {
                               ),
                       ),
                       const SizedBox(height: 24),
-                      _buildReviewRow("LOCATION", "MG Road, Mumbai, Maharashtra", Icons.location_on_rounded),
+                      _buildReviewRow("LOCATION", _currentAddress, Icons.location_on_rounded),
                       _buildReviewRow("CATEGORY", _selectedCategory ?? "", Icons.grid_view_rounded),
                       _buildReviewRow("PRIORITY", _selectedPriority ?? "", Icons.flag_rounded),
                       _buildReviewRow("DESCRIPTION", _descriptionController.text, Icons.notes_rounded),
@@ -368,7 +493,7 @@ Future<void> _submitReport() async {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => setState(() => _currentStep = 3),
+                  onPressed: _isSubmitting ? null : () => setState(() => _currentStep = 3),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 56), 
                     side: const BorderSide(color: Color(0xFF2962FF)),
@@ -380,14 +505,23 @@ Future<void> _submitReport() async {
               const SizedBox(width: 16),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _isConfirmed ? _submitReport : null,
+                  onPressed: (_isConfirmed && !_isSubmitting) ? _submitReport : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2962FF),
                     minimumSize: const Size(0, 56),
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
-                  child: const Text("Submit Report", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : const Text("Submit Report", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -514,38 +648,77 @@ Future<void> _submitReport() async {
     );
   }
 
-  Widget _buildVoiceMessageButton() {
-    return Container(
+Widget _buildVoiceMessageButton() {
+  return GestureDetector(
+    onTap: _listenVoice,
+    child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFE3F2FD), 
+        color: _isListening ? Colors.red.withAlpha(20) : const Color(0xFFE3F2FD),
         borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFF2962FF).withAlpha(51))
+        border: Border.all(
+          color: _isListening ? Colors.red : const Color(0xFF2962FF).withAlpha(51),
+        ),
       ),
-      child: Row(children: const [
-        Icon(Icons.mic_rounded, color: Color(0xFF2962FF)),
-        SizedBox(width: 12),
-        Text("Hold to record voice description", style: TextStyle(color: Color(0xFF2962FF), fontWeight: FontWeight.bold)),
-      ]),
-    );
-  }
+      child: Row(
+        children: [
+          Icon(
+            _isListening ? Icons.stop_circle_rounded : Icons.mic_rounded,
+            color: _isListening ? Colors.red : const Color(0xFF2962FF),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            _isListening ? "Listening... tap to stop" : "Tap to speak description",
+            style: TextStyle(
+              color: _isListening ? Colors.red : const Color(0xFF2962FF),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _buildLocationBox() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white, 
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 10)],
-      ),
-      child: Row(children: const [
-        Icon(Icons.my_location_rounded, color: Color(0xFF2962FF), size: 20),
-        SizedBox(width: 12),
-        Expanded(child: Text("MG Road, Mumbai, Maharashtra", style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1A237E)))),
-        Icon(Icons.edit_location_alt_rounded, color: Colors.grey, size: 18),
-      ]),
-    );
-  }
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withAlpha(8),
+          blurRadius: 10,
+        ),
+      ],
+    ),
+    child: Row(
+      children: [
+        const Icon(
+          Icons.my_location_rounded,
+          color: Color(0xFF2962FF),
+          size: 20,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            _currentAddress,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A237E),
+            ),
+          ),
+        ),
+        const Icon(
+          Icons.edit_location_alt_rounded,
+          color: Colors.grey,
+          size: 18,
+        ),
+      ],
+    ),
+  );
+}
 
   @override
   void dispose() {

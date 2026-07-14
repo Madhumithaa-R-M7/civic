@@ -1,24 +1,84 @@
 import 'package:flutter/material.dart';
-// Note: Ensure this matches your home screen's filename
-import 'home_screen.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'home_screen.dart';
 
 class RewardsScreen extends StatelessWidget {
   const RewardsScreen({super.key});
 
+  Stream<QuerySnapshot> _userReportsStream() {
+    final user = FirebaseAuth.instance.currentUser;
+
+    return FirebaseFirestore.instance
+        .collection('complaints')
+        .where('userId', isEqualTo: user?.uid)
+        .snapshots();
+  }
+
+  Map<String, int> _calculateStats(List<QueryDocumentSnapshot> docs) {
+    int reported = docs.length;
+    int pending = 0;
+    int inProgress = 0;
+    int resolved = 0;
+    int points = 0;
+    int geoReports = 0;
+    int photoReports = 0;
+
+    for (var doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final status = data['status'];
+
+      if (data['latitude'] != null && data['longitude'] != null) {
+        geoReports++;
+      }
+
+      if ((data['imagePath'] ?? '').toString().isNotEmpty ||
+          (data['imageUrl'] ?? '').toString().isNotEmpty) {
+        photoReports++;
+      }
+
+      if (status == 'Pending') {
+        pending++;
+        points += 10;
+      } else if (status == 'In Progress') {
+        inProgress++;
+        points += 35;
+      } else if (status == 'Resolved') {
+        resolved++;
+        points += 60;
+      }
+    }
+
+    return {
+      'reported': reported,
+      'pending': pending,
+      'inProgress': inProgress,
+      'resolved': resolved,
+      'points': points,
+      'geoReports': geoReports,
+      'photoReports': photoReports,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Ultra-light grey/blue background
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text("Rewards & Points",
-            style: TextStyle(color: Color(0xFF1A237E), fontWeight: FontWeight.w800)),
+        title: const Text(
+          "Rewards & Points",
+          style: TextStyle(
+            color: Color(0xFF1A237E),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.black87, size: 20),
           onPressed: () {
-            // This ensures it goes to Home and clears the "dark page" memory
             Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (context) => const HomeScreen()),
@@ -27,133 +87,213 @@ class RewardsScreen extends StatelessWidget {
           },
         ),
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 16),
-            
-            // 1. MAIN POINTS CARD
-            _buildMainPointsCard(),
-            
-            const SizedBox(height: 30),
-            const Text("Badges & Achievements",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
-            const SizedBox(height: 16),
-            
-            // 2. BADGE GRID
-            _buildBadgeGrid(),
-            
-            const SizedBox(height: 30),
-            const Text("Recent Activity",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
-            const SizedBox(height: 16),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: _userReportsStream(),
+        builder: (context, snapshot) {
+          final docs = snapshot.data?.docs ?? [];
+          final stats = _calculateStats(docs);
 
-            // 3. RECENT ACTIVITY LIST
-            _buildRecentActivityList(),
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                _buildMainPointsCard(stats),
+                const SizedBox(height: 30),
 
-            const SizedBox(height: 20),
+                const Text(
+                  "Badges & Achievements",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A237E),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildBadgeGrid(stats),
 
-            // 4. HOW TO EARN POINTS GUIDE
-            _buildEarnPointsGuide(),
+                const SizedBox(height: 30),
+                const Text(
+                  "Recent Point Activity",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A237E),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildRecentActivityList(docs),
 
-            const SizedBox(height: 30),
-            const Text("Mumbai Leaderboard",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
-            const SizedBox(height: 16),
+                const SizedBox(height: 25),
+                _buildEarnPointsGuide(),
 
-            // 5. LEADERBOARD
-            _buildLeaderboard(),
-            
-            const SizedBox(height: 40),
-          ],
-        ),
+                const SizedBox(height: 30),
+                const Text(
+                  "Demo City Leaderboard",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A237E),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildLeaderboard(stats['points'] ?? 0),
+
+                const SizedBox(height: 40),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildMainPointsCard() {
+  Widget _buildMainPointsCard(Map<String, int> stats) {
+    final points = stats['points'] ?? 0;
+    final reported = stats['reported'] ?? 0;
+    final resolved = stats['resolved'] ?? 0;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color.fromARGB(255, 197, 2, 245), Color.fromARGB(255, 214, 108, 202)],
+          colors: [Color.fromARGB(255, 22, 63, 168), Color.fromARGB(255, 22, 63, 168)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7B2FF7).withOpacity(0.25),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
+        ],
       ),
       child: Column(
         children: [
           const CircleAvatar(
-            radius: 30,
+            radius: 34,
             backgroundColor: Colors.white24,
-            child: Icon(Icons.stars_rounded, color: Colors.white, size: 30),
+            child: Icon(Icons.stars_rounded, color: Colors.white, size: 34),
           ),
           const SizedBox(height: 12),
-          const Text("290", style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white)),
-          const Text("Total Civic Points", style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w500)),
+          Text(
+            points.toString(),
+            style: const TextStyle(
+              fontSize: 44,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
+          ),
+          const Text(
+            "Total Civic Impact Points",
+            style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w500),
+          ),
           const SizedBox(height: 20),
           const Divider(color: Colors.white24),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _statItem("12", "Issues\nReported"),
-              _statItem("8", "Issues\nResolved"),
-              _statItem("1", "Badges\nEarned"),
+              _statItem(reported.toString(), "Issues\nReported"),
+              _statItem(resolved.toString(), "Issues\nResolved"),
+              _statItem(_levelName(points), "Impact\nLevel"),
             ],
-          )
+          ),
         ],
       ),
     );
   }
 
+  String _levelName(int points) {
+    if (points >= 1000) return "Elite";
+    if (points >= 500) return "Hero";
+    if (points >= 250) return "Active";
+    if (points >= 100) return "Rising";
+    return "Starter";
+  }
+
   Widget _statItem(String val, String label) {
     return Column(
       children: [
-        Text(val, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-        Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+        Text(
+          val,
+          style: const TextStyle(
+              color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white60, fontSize: 11),
+        ),
       ],
     );
   }
 
-  Widget _buildBadgeGrid() {
+  Widget _buildBadgeGrid(Map<String, int> stats) {
+    final reported = stats['reported'] ?? 0;
+    final resolved = stats['resolved'] ?? 0;
+    final points = stats['points'] ?? 0;
+    final geo = stats['geoReports'] ?? 0;
+    final photo = stats['photoReports'] ?? 0;
+
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: 2,
       crossAxisSpacing: 16,
       mainAxisSpacing: 16,
-      childAspectRatio: 0.85,
+      childAspectRatio: 0.84,
       children: [
-        _badgeCard("Civic Hero", "Reported 10+ issues", Icons.shield, Colors.amber, true, 1.0),
-        _badgeCard("City Guardian", "Helped resolve 25+ issues", Icons.domain, Colors.blue, false, 0.32),
-        _badgeCard("Community Champion", "Earned 500+ civic points", Icons.emoji_events, Colors.purple, false, 0.48),
-        _badgeCard("Feedback Master", "Provided feedback for 20+ issues", Icons.mode_comment, Colors.green, false, 0.15),
+        _badgeCard("First Reporter", "Submit your first issue", Icons.flag,
+            Colors.orange, reported >= 1, reported / 1),
+        _badgeCard("Civic Starter", "Report 5+ civic issues", Icons.rocket_launch,
+            Colors.blue, reported >= 5, reported / 5),
+        _badgeCard("Civic Hero", "Resolve 5+ issues", Icons.shield,
+            Colors.green, resolved >= 5, resolved / 5),
+        _badgeCard("City Guardian", "Resolve 10+ issues", Icons.domain,
+            Colors.purple, resolved >= 10, resolved / 10),
+        _badgeCard("Geo Accurate", "Add GPS in 5 reports", Icons.location_on,
+            Colors.redAccent, geo >= 5, geo / 5),
+        _badgeCard("Evidence Expert", "Add photo proof 5 times",
+            Icons.camera_alt, Colors.teal, photo >= 5, photo / 5),
+        _badgeCard("Point Collector", "Earn 250+ points", Icons.stars,
+            Colors.amber, points >= 250, points / 250),
+        _badgeCard("Change Maker", "Earn 1000+ points", Icons.emoji_events,
+            Colors.deepPurple, points >= 1000, points / 1000),
       ],
     );
   }
 
-  Widget _badgeCard(String title, String desc, IconData icon, Color color, bool earned, double progress) {
+  Widget _badgeCard(String title, String desc, IconData icon, Color color,
+      bool earned, double progress) {
+    final safeProgress = progress.clamp(0.0, 1.0);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: earned ? color.withOpacity(0.5) : Colors.transparent),
+        border:
+            Border.all(color: earned ? color.withOpacity(0.5) : Colors.transparent),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: earned ? color : Colors.grey.shade300, size: 36),
+          Icon(icon, color: earned ? color : Colors.grey.shade300, size: 38),
           const SizedBox(height: 12),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          Text(desc, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+          Text(title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          const SizedBox(height: 4),
+          Text(desc,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey, fontSize: 10)),
           const SizedBox(height: 12),
           if (earned)
             const Row(
@@ -161,15 +301,28 @@ class RewardsScreen extends StatelessWidget {
               children: [
                 Icon(Icons.check_circle, color: Colors.green, size: 14),
                 SizedBox(width: 4),
-                Text("Earned", style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
+                Text("Unlocked",
+                    style: TextStyle(
+                        color: Colors.green,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold)),
               ],
             )
           else
             Column(
               children: [
-                LinearProgressIndicator(value: progress, backgroundColor: Colors.grey.shade100, color: color, borderRadius: BorderRadius.circular(10)),
+                LinearProgressIndicator(
+                  value: safeProgress,
+                  backgroundColor: Colors.grey.shade100,
+                  color: color,
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 const SizedBox(height: 4),
-                Text("${(progress * 100).toInt()}% complete", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                Text("${(safeProgress * 100).toInt()}% complete",
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey)),
               ],
             ),
         ],
@@ -177,7 +330,24 @@ class RewardsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRecentActivityList() {
+  Widget _buildRecentActivityList(List<QueryDocumentSnapshot> docs) {
+    if (docs.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          "No point activity yet. Submit your first report to begin!",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    final recentDocs = docs.take(5).toList();
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -185,21 +355,41 @@ class RewardsScreen extends StatelessWidget {
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
       ),
       child: Column(
-        children: [
-          _activityTile("Feedback provided", "19 Dec", "+50"),
-          _activityTile("Issue resolved confirmation", "18 Dec", "+30"),
-          _activityTile("Issue reported", "17 Dec", "+20"),
-        ],
+        children: recentDocs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final status = data['status'] ?? 'Pending';
+          final category = data['category'] ?? 'Civic Issue';
+
+          int earned = 10;
+          String title = "Report submitted";
+
+          if (status == 'In Progress') {
+            earned = 35;
+            title = "Issue accepted by admin";
+          } else if (status == 'Resolved') {
+            earned = 60;
+            title = "Issue resolved successfully";
+          }
+
+          return _activityTile(title, category, "+$earned");
+        }).toList(),
       ),
     );
   }
 
-  Widget _activityTile(String title, String date, String points) {
+  Widget _activityTile(String title, String subtitle, String points) {
     return ListTile(
-      leading: CircleAvatar(backgroundColor: Colors.green.withOpacity(0.1), child: const Icon(Icons.add, color: Colors.green, size: 18)),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-      subtitle: Text(date, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-      trailing: Text(points, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
+      leading: CircleAvatar(
+        backgroundColor: Colors.green.withOpacity(0.1),
+        child: const Icon(Icons.add, color: Colors.green, size: 18),
+      ),
+      title: Text(title,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+      subtitle: Text(subtitle,
+          style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      trailing: Text(points,
+          style: const TextStyle(
+              color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
     );
   }
 
@@ -214,12 +404,18 @@ class RewardsScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("How to Earn Points", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
+          const Text("How Points Are Calculated",
+              style:
+                  TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
           const SizedBox(height: 12),
-          _guideRow(Icons.add_circle_outline, "Report an issue: 20 points"),
-          _guideRow(Icons.check_circle_outline, "Confirm resolution: 30 points"),
-          _guideRow(Icons.comment_outlined, "Provide feedback: 50 points"),
-          _guideRow(Icons.star_outline, "Earn badges: 100 points"),
+          _guideRow(Icons.add_circle_outline, "Pending report: +10 points"),
+          _guideRow(Icons.settings_suggest_outlined,
+              "Admin moves to In Progress: +35 points"),
+          _guideRow(Icons.check_circle_outline, "Resolved issue: +60 points"),
+          _guideRow(Icons.location_on_outlined,
+              "GPS-based reports unlock Geo Accurate badge"),
+          _guideRow(Icons.camera_alt_outlined,
+              "Photo evidence unlocks Evidence Expert badge"),
         ],
       ),
     );
@@ -227,32 +423,78 @@ class RewardsScreen extends StatelessWidget {
 
   Widget _guideRow(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 7),
       child: Row(
         children: [
           Icon(icon, size: 16, color: Colors.blue.shade700),
           const SizedBox(width: 8),
-          Text(text, style: TextStyle(fontSize: 13, color: Colors.blue.shade900)),
+          Expanded(
+            child: Text(text,
+                style: TextStyle(fontSize: 13, color: Colors.blue.shade900)),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildLeaderboard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
-      ),
-      child: Column(
-        children: [
-          _leaderboardTile(1, "Rajesh Kumar", "1250 points", false),
-          _leaderboardTile(2, "Priya Sharma", "1180 points", false),
-          _leaderboardTile(3, "Amit Patel", "950 points", false),
-          _leaderboardTile(4, "You", "290 points", true),
-        ],
-      ),
+  Widget _buildLeaderboard(int myPoints) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .orderBy('points', descending: true)
+          .limit(5)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            alignment: Alignment.center,
+            child: const Text("No leaderboard data available",
+                style: TextStyle(color: Colors.grey)),
+          );
+        }
+
+        final users = snapshot.data!.docs;
+        bool hasMe = false;
+
+        final List<Widget> tiles = [];
+        for (int i = 0; i < users.length; i++) {
+          final doc = users[i];
+          final data = doc.data() as Map<String, dynamic>;
+          final isMe = currentUser != null && doc.id == currentUser.uid;
+          if (isMe) hasMe = true;
+
+          final name = data['name'] ?? "User";
+          final pts = data['points'] ?? 0;
+
+          tiles.add(_leaderboardTile(i + 1, name, "$pts points", isMe));
+        }
+
+        if (!hasMe && currentUser != null) {
+          tiles.add(_leaderboardTile(users.length + 1, "You", "$myPoints points", true));
+        }
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+          ),
+          child: Column(
+            children: tiles,
+          ),
+        );
+      },
     );
   }
 
@@ -261,18 +503,26 @@ class RewardsScreen extends StatelessWidget {
       color: isMe ? Colors.green.withOpacity(0.05) : Colors.transparent,
       child: ListTile(
         leading: CircleAvatar(
-          radius: 14,
+          radius: 15,
           backgroundColor: isMe ? Colors.green : Colors.grey.shade100,
-          child: Text(rank.toString(), style: TextStyle(color: isMe ? Colors.white : Colors.black, fontSize: 12, fontWeight: FontWeight.bold)),
+          child: Text(rank.toString(),
+              style: TextStyle(
+                  color: isMe ? Colors.white : Colors.black,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold)),
         ),
-        title: Text(name, style: TextStyle(fontWeight: isMe ? FontWeight.bold : FontWeight.normal)),
-        subtitle: const Text("Mumbai", style: TextStyle(fontSize: 11)),
+        title: Text(name,
+            style: TextStyle(fontWeight: isMe ? FontWeight.bold : FontWeight.normal)),
+        subtitle: const Text("Local Civic Contributor",
+            style: TextStyle(fontSize: 11)),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(pts, style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(width: 8),
-            Icon(Icons.emoji_events, color: rank == 1 ? Colors.amber : Colors.grey.shade300, size: 18),
+            Icon(Icons.emoji_events,
+                color: rank == 1 ? Colors.amber : Colors.grey.shade300,
+                size: 18),
           ],
         ),
       ),

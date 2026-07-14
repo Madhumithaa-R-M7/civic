@@ -1,6 +1,6 @@
 {
   "project_info": {
-    "project_number": "370361955515",
+    "project_number": "52144044268",
     "project_id": "readyremake",
     "storage_bucket": "readyremake.firebasestorage.app"
    
@@ -8,7 +8,7 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:370361955515:android:333d357bafed940c65259e",
+        "mobilesdk_app_id": "1:52144044268:android:5b6a4f47c196095b918dc9",
         "android_client_info": {
           "package_name": "com.example.cvk"
         }

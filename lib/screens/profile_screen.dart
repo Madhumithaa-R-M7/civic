@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart'; 
 
 class ProfileScreen extends StatefulWidget {
@@ -23,8 +24,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool isEditing = false;
   late TextEditingController nameController;
   late TextEditingController locationController;
-  // Masked phone number as requested
-  final String phoneNumber = "91******63";
+  // Masked phone number from FirebaseAuth
+  String get phoneNumber {
+    final phone = FirebaseAuth.instance.currentUser?.phoneNumber ?? '';
+    if (phone.length > 6) {
+      return phone.replaceRange(phone.length - 8, phone.length - 2, '******');
+    }
+    return phone.isNotEmpty ? phone : "Not available";
+  }
 
   @override
   void initState() {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'otp_screen.dart'; // Ensure this path is correct
 
 class RegisterScreen extends StatefulWidget {
@@ -10,6 +11,13 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   bool isMobileSelected = true;
+  final TextEditingController _inputController = TextEditingController();
+
+  @override
+  void dispose() {
+    _inputController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +120,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               fontWeight: FontWeight.w600, fontSize: 15)),
                       const SizedBox(height: 8),
                       TextField(
+                        controller: _inputController,
                         keyboardType: isMobileSelected
                             ? TextInputType.phone
                             : TextInputType.emailAddress,
@@ -133,15 +142,48 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       // SEND OTP BUTTON
                       ElevatedButton(
-                        onPressed: () {
-                          // NAVIGATE TO OTP SCREEN
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => OtpScreen(
-                                isFromMobile: isMobileSelected,
-                              ),
-                            ),
+                        onPressed: () async {
+                          if (!isMobileSelected) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Email OTP is not enabled now. Use mobile OTP.")),
+                            );
+                            return;
+                          }
+
+                          String phone = _inputController.text.trim();
+                          if (phone.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Please enter a mobile number")),
+                            );
+                            return;
+                          }
+
+                          if (phone.length == 10) {
+                            phone = "+91$phone";
+                          }
+
+                          await FirebaseAuth.instance.verifyPhoneNumber(
+                            phoneNumber: phone,
+                            verificationCompleted: (PhoneAuthCredential credential) async {
+                              await FirebaseAuth.instance.signInWithCredential(credential);
+                            },
+                            verificationFailed: (FirebaseAuthException e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(e.message ?? "OTP sending failed")),
+                              );
+                            },
+                            codeSent: (String verificationId, int? resendToken) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => OtpScreen(
+                                    isFromMobile: true,
+                                    verificationId: verificationId,
+                                  ),
+                                ),
+                              );
+                            },
+                            codeAutoRetrievalTimeout: (String verificationId) {},
                           );
                         },
                         style: ElevatedButton.styleFrom(
